@@ -4,8 +4,10 @@ from fastapi.responses import HTMLResponse # <--- This is new
 import requests
 import math
 import os
+from dotenv import load_dotenv
 
-app = FastAPI()
+app = FastAPI
+load_dotenv() # 🔓 Loads the variables from the .env file
 
 # 🔓 Enable CORS so browsers don't block the connection
 app.add_middleware(
@@ -17,7 +19,12 @@ app.add_middleware(
 )
 
 # 🔐 SECURITY: Replace this with your actual CTA API Key
-CTA_API_KEY = "f412d27a71de42d2aceb9c260769abc1"
+# 🔐 SECURITY: Now loading securely from environment
+CTA_API_KEY = os.getenv("CTA_API_KEY")
+
+# Safety check: If key is missing, stop immediately
+if not CTA_API_KEY:
+    raise ValueError("No API Key found! Make sure you created a .env file.")
 BASE_URL = "http://lapi.transitchicago.com/api/1.0/ttpositions.aspx"
 
 # --- 1. The New Root Endpoint (Serves your HTML file) ---
@@ -87,4 +94,5 @@ def find_user_train(route: str, lat: float, lon: float):
             "confidence": "High" if closest['distance_meters'] < 200 else "Low"
         }
     
+
     return {"found": False, "message": "No live trains found."}

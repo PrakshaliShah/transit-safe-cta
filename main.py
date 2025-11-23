@@ -1,15 +1,18 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse # <--- This is new
+from fastapi.responses import HTMLResponse
 import requests
 import math
 import os
 from dotenv import load_dotenv
 
-app = FastAPI
-load_dotenv() # 🔓 Loads the variables from the .env file
+# 1. Initialize the App correctly
+app = FastAPI() 
 
-# 🔓 Enable CORS so browsers don't block the connection
+# 2. Load Environment Variables
+load_dotenv()
+
+# 3. Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,25 +21,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🔐 SECURITY: Replace this with your actual CTA API Key
-# 🔐 SECURITY: Now loading securely from environment
+# 4. Securely Load API Key
 CTA_API_KEY = os.getenv("CTA_API_KEY")
 
-# Safety check: If key is missing, stop immediately
+# Safety Check
 if not CTA_API_KEY:
-    raise ValueError("No API Key found! Make sure you created a .env file.")
+    raise ValueError("No API Key found! Make sure you created a .env file with CTA_API_KEY inside.")
+
 BASE_URL = "http://lapi.transitchicago.com/api/1.0/ttpositions.aspx"
 
-# --- 1. The New Root Endpoint (Serves your HTML file) ---
+# --- Root Endpoint (Serves Frontend) ---
 @app.get("/", response_class=HTMLResponse)
 def read_root():
-    # This looks for 'index.html' in the same folder as main.py
     if os.path.exists("index.html"):
         with open("index.html", "r", encoding="utf-8") as f:
             return f.read()
     return "Error: index.html not found. Make sure it is in the same folder!"
 
-# --- 2. The Distance Calculation Logic ---
+# --- Distance Calculator ---
 def calculate_distance(lat1, lon1, lat2, lon2):
     R = 6371000 
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -46,7 +48,7 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-# --- 3. The Train Finding Logic ---
+# --- Train Finder Logic ---
 @app.get("/find-train/{route}")
 def find_user_train(route: str, lat: float, lon: float):
     try:
@@ -69,7 +71,7 @@ def find_user_train(route: str, lat: float, lon: float):
 
     live_trains = []
     for t in raw_trains:
-        # Accept trains even if 'isSch' is missing (which means they are LIVE)
+        # Filter for live trains (defaulting isSch to '0' if missing)
         if t.get('isSch', '0') == '0':
             t_lat = float(t['lat'])
             t_lon = float(t['lon'])
@@ -94,5 +96,4 @@ def find_user_train(route: str, lat: float, lon: float):
             "confidence": "High" if closest['distance_meters'] < 200 else "Low"
         }
     
-
     return {"found": False, "message": "No live trains found."}

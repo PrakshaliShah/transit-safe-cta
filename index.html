@@ -26,10 +26,6 @@
         .status-panel { background: #1e293b; padding: 20px; border-radius: 12px; margin-top: -10px; position: relative; z-index: 2; }
         .btn-danger { background-color: #ef4444; border: none; }
         .btn-warning { background-color: #f97316; border: none; }
-        
-        /* Map Popup Styling */
-        .leaflet-popup-content-wrapper { background: #1e293b; color: #fff; }
-        .leaflet-popup-tip { background: #1e293b; }
     </style>
 </head>
 <body>
@@ -37,7 +33,7 @@
     <main class="container">
         <hgroup>
             <h1>🚆 CTA Command Center</h1>
-            <p style="color:#94a3b8;">Live GPS & Ghost Train Detection</p>
+            <p style="color:#94a3b8;">Live Tracking & Threat Response</p>
         </hgroup>
 
         <select id="routeSelect" onchange="clearMap()">
@@ -73,8 +69,63 @@
 
     <script>
         // 1. Initialize Map
-        // Centered on Chicago (41.8781, -87.6298)
         var map = L.map('map').setView([41.8781, -87.6298], 13);
         
-        // Dark Mode Map Tiles
-        L.tileLayer('https://{s}.
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap, © CartoDB',
+            maxZoom: 19
+        }).addTo(map);
+
+        var userMarker = null;
+        var trainMarkers = [];
+
+        async function startTracking() {
+            const btn = document.getElementById('trackBtn');
+            const route = document.getElementById('routeSelect').value;
+            
+            btn.setAttribute('aria-busy', 'true');
+            btn.textContent = 'Scanning...';
+
+            if (!navigator.geolocation) {
+                alert("GPS not supported");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+
+                // Update User Location
+                if (userMarker) map.removeLayer(userMarker);
+                userMarker = L.circleMarker([lat, lon], {
+                    color: '#3b82f6', 
+                    radius: 8,
+                    fillOpacity: 1
+                }).addTo(map).bindPopup("You are here");
+
+                map.setView([lat, lon], 14); 
+
+                try {
+                    const response = await fetch(`/find-train/${route}?lat=${lat}&lon=${lon}`);
+                    const data = await response.json();
+
+                    btn.setAttribute('aria-busy', 'false');
+                    btn.textContent = '📍 Refresh Map';
+                    document.getElementById('resultBox').style.display = 'block';
+
+                    clearMap();
+
+                    if (data.found) {
+                        const closest = data.closest_train;
+                        document.getElementById('trainId').innerText = `✅ On Run #${closest.run_number}`;
+                        document.getElementById('distInfo').innerText = `${closest.distance_meters}m away (${data.confidence})`;
+
+                        // PLOT TRAINS (Standard Solid Colors Only)
+                        data.all_trains.forEach(train => {
+                            const isClosest = (train.run_number === closest.run_number);
+                            
+                            // Simple Logic: Green for yours, Red for others
+                            const markerColor = isClosest ? '#22c55e' : '#ef4444';
+                            const zIndex = isClosest ? 100 : 50;
+                            
+                            const marker = L.marker([train.

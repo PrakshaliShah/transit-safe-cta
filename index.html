@@ -2,181 +2,168 @@
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>CTA Silent Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title>CTA Command Center</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
     <style>
-        /* Custom Styling for "Advanced" Feel */
-        body { 
-            padding-top: 2rem; 
-            background-color: #11191f; /* Deep blue-black */
-        }
-        .container { max-width: 600px; }
+        body { padding: 0; margin: 0; background-color: #0f172a; }
+        .container { padding: 20px; max-width: 800px; }
         
-        /* The Result Box */
-        .status-box { 
-            background-color: #1e293b; 
-            padding: 25px; 
+        /* The Map Container */
+        #map { 
+            height: 400px; 
+            width: 100%; 
             border-radius: 12px; 
-            margin-top: 20px; 
-            border-left: 6px solid #007bff; /* Blue accent bar */
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            animation: slideIn 0.3s ease-out;
+            margin-bottom: 20px; 
+            border: 2px solid #334155;
+            z-index: 1;
         }
 
-        /* Emergency Button Colors */
-        .btn-danger { background-color: #ef4444; border-color: #ef4444; color: white; }
-        .btn-warning { background-color: #f97316; border-color: #f97316; color: white; }
-        .btn-medical { background-color: #3b82f6; border-color: #3b82f6; color: white; }
-        .btn-alert   { background-color: #a855f7; border-color: #a855f7; color: white; }
-
-        /* Animations */
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        /* Pulse effect for the scanning button */
-        button[aria-busy="true"] {
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.7; }
-            100% { opacity: 1; }
-        }
+        /* Status & Buttons */
+        .status-panel { background: #1e293b; padding: 20px; border-radius: 12px; margin-top: -10px; position: relative; z-index: 2; }
+        .btn-danger { background-color: #ef4444; border: none; }
+        .btn-warning { background-color: #f97316; border: none; }
     </style>
 </head>
 <body>
 
     <main class="container">
-        <hgroup style="text-align: center; margin-bottom: 2rem;">
-            <h1>🚆 CTA Silent Tracker</h1>
-            <p style="color: #94a3b8;">Secure • Real-Time • Discreet</p>
+        <hgroup>
+            <h1>🚆 CTA Command Center</h1>
+            <p style="color:#94a3b8;">Live Tracking & Threat Response</p>
         </hgroup>
 
-        <article>
-            <label for="routeSelect"><strong>Select Your Line</strong></label>
-            <select id="routeSelect">
-                <option value="Red">Red Line</option>
-                <option value="Blue">Blue Line</option>
-                <option value="Brn">Brown Line</option>
-                <option value="G">Green Line</option>
-                <option value="Org">Orange Line</option>
-                <option value="P">Purple Line</option>
-                <option value="Pink">Pink Line</option>
-                <option value="Y">Yellow Line</option>
-            </select>
+        <select id="routeSelect" onchange="clearMap()">
+            <option value="Red">Red Line</option>
+            <option value="Blue">Blue Line</option>
+            <option value="Brn">Brown Line</option>
+            <option value="G">Green Line</option>
+            <option value="Org">Orange Line</option>
+            <option value="P">Purple Line</option>
+            <option value="Pink">Pink Line</option>
+            <option value="Y">Yellow Line</option>
+        </select>
 
-            <button onclick="findTrain()" id="findBtn" style="margin-top: 10px; font-weight: bold;">
-                📍 Locate My Train
-            </button>
-        </article>
+        <button onclick="startTracking()" id="trackBtn">📍 Start Live Tracking</button>
 
-        <div id="resultBox" class="status-box" style="display:none;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h3 id="trainId" style="margin: 0; color: #fff;">Scanning...</h3>
-                <small id="confBadge" style="background:#333; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem;">LIVE</small>
-            </div>
+        <div id="map"></div>
+
+        <div id="resultBox" class="status-panel" style="display:none;">
+            <h3 id="trainId">Scanning...</h3>
+            <p id="distInfo">Waiting for GPS...</p>
             
-            <p id="distInfo" style="margin-top: 10px; color: #cbd5e1;">Distance: ...</p>
-            
-            <hr style="border-color: #334155; margin: 20px 0;">
-            
-            <p style="font-size: 0.8rem; letter-spacing: 1px; color: #94a3b8; text-transform: uppercase; font-weight: bold;">
-                Select Incident Type
-            </p>
-            
-            <div class="grid">
+            <hr>
+            <small>SILENT REPORTING</small>
+            <div class="grid" style="margin-top:10px;">
                 <button onclick="sendAlert('WEAPON')" class="btn-danger">🔫 Weapon</button>
                 <button onclick="sendAlert('FIGHT')" class="btn-warning">👊 Fight</button>
-            </div>
-            <div class="grid">
-                <button onclick="sendAlert('MEDICAL')" class="btn-medical">🚑 Medical</button>
-                <button onclick="sendAlert('HARASSMENT')" class="btn-alert">⚠️ Harassment</button>
             </div>
         </div>
     </main>
 
     <script>
-        async function findTrain() {
+        // 1. Initialize Map
+        // Centered on Chicago (41.8781, -87.6298)
+        var map = L.map('map').setView([41.8781, -87.6298], 13);
+        
+        // Dark Mode Map Tiles (CartoDB DarkMatter)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap, © CartoDB',
+            maxZoom: 19
+        }).addTo(map);
+
+        var userMarker = null;
+        var trainMarkers = [];
+
+        async function startTracking() {
+            const btn = document.getElementById('trackBtn');
             const route = document.getElementById('routeSelect').value;
-            const btn = document.getElementById('findBtn');
-            const resultBox = document.getElementById('resultBox');
             
-            // 1. UI Loading State
             btn.setAttribute('aria-busy', 'true');
-            btn.textContent = '🛰️ Triangulating GPS...';
-            resultBox.style.display = 'none';
+            btn.textContent = 'Scanning...';
 
             if (!navigator.geolocation) {
-                alert("Geolocation is not supported by this browser.");
-                btn.setAttribute('aria-busy', 'false');
-                btn.textContent = '📍 Locate My Train';
+                alert("GPS not supported");
                 return;
             }
 
-            // 2. Get GPS
-            navigator.geolocation.getCurrentPosition(async (position) => {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                
-                btn.textContent = '🔄 Scanning CTA Network...';
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+
+                // Update User Location on Map
+                if (userMarker) map.removeLayer(userMarker);
+                userMarker = L.circleMarker([lat, lon], {
+                    color: '#3b82f6', // Blue dot for user
+                    radius: 8,
+                    fillOpacity: 1
+                }).addTo(map).bindPopup("You are here");
+
+                map.setView([lat, lon], 14); // Zoom to user
 
                 try {
-                    // 3. Call Python Backend
+                    // Call Backend
                     const response = await fetch(`/find-train/${route}?lat=${lat}&lon=${lon}`);
                     const data = await response.json();
 
-                    // 4. Update UI
                     btn.setAttribute('aria-busy', 'false');
-                    btn.textContent = '📍 Update Location';
-                    resultBox.style.display = 'block';
+                    btn.textContent = '📍 Refresh Map';
+                    document.getElementById('resultBox').style.display = 'block';
+
+                    // Clear old train markers
+                    trainMarkers.forEach(m => map.removeLayer(m));
+                    trainMarkers = [];
 
                     if (data.found) {
-                        const train = data.closest_train;
-                        document.getElementById('trainId').innerText = `✅ Run #${train.run_number}`;
-                        document.getElementById('distInfo').innerHTML = `
-                            Next Stop: <strong>${train.next_stop}</strong><br>
-                            Distance: ${train.distance_meters} meters
-                        `;
-                        
-                        // Update Confidence Badge
-                        const badge = document.getElementById('confBadge');
-                        if (data.confidence === "High") {
-                            badge.style.backgroundColor = "#22c55e"; // Green
-                            badge.innerText = "HIGH CONFIDENCE";
-                        } else {
-                            badge.style.backgroundColor = "#f59e0b"; // Orange
-                            badge.innerText = "LOW CONFIDENCE";
-                        }
+                        // 1. Show User's Train Text
+                        const closest = data.closest_train;
+                        document.getElementById('trainId').innerText = `✅ On Run #${closest.run_number}`;
+                        document.getElementById('distInfo').innerText = `${closest.distance_meters}m away (${data.confidence})`;
+
+                        // 2. Plot ALL Trains on Map
+                        data.all_trains.forEach(train => {
+                            // Is this the user's train?
+                            const isClosest = (train.run_number === closest.run_number);
+                            
+                            const marker = L.marker([train.lat, train.lon], {
+                                icon: L.divIcon({
+                                    className: 'custom-icon',
+                                    html: `<div style="
+                                        background-color: ${isClosest ? '#22c55e' : '#ef4444'}; 
+                                        width: 12px; height: 12px; 
+                                        border-radius: 50%; 
+                                        border: 2px solid white;">
+                                    </div>`
+                                })
+                            }).addTo(map);
+                            
+                            marker.bindPopup(`<b>Run #${train.run_number}</b><br>Dest: ${train.destination}`);
+                            trainMarkers.push(marker);
+                        });
 
                     } else {
-                        document.getElementById('trainId').innerText = "❌ No Train Found";
-                        document.getElementById('distInfo').innerText = "Could not match your GPS to a live train.";
-                        document.getElementById('confBadge').innerText = "ERROR";
-                        document.getElementById('confBadge').style.backgroundColor = "#ef4444";
+                        document.getElementById('trainId').innerText = "❌ No Trains Found";
                     }
-                } catch (error) {
+
+                } catch (e) {
+                    alert("Error: " + e);
                     btn.setAttribute('aria-busy', 'false');
-                    btn.textContent = 'Retry';
-                    alert("Connection Error: " + error);
                 }
-            }, (error) => {
-                btn.setAttribute('aria-busy', 'false');
-                btn.textContent = '📍 Locate My Train';
-                alert("GPS Error: Please allow location access.");
             });
         }
 
         function sendAlert(type) {
             const trainText = document.getElementById('trainId').innerText;
-            // Get raw text without the "Next Stop" HTML formatting for the SMS
-            const distText = document.getElementById('distInfo').innerText.replace('\n', '. ');
-            
-            const smsBody = `EMERGENCY: ${type} reported on CTA. ${trainText}. ${distText}. My GPS location is included via carrier.`;
-            
+            const smsBody = `EMERGENCY: ${type} reported. ${trainText}. GPS included.`;
             window.location.href = `sms:911?body=${encodeURIComponent(smsBody)}`;
+        }
+        
+        function clearMap() {
+            trainMarkers.forEach(m => map.removeLayer(m));
+            trainMarkers = [];
         }
     </script>
 </body>

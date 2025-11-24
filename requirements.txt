@@ -2,4 +2,5 @@ fastapi
 uvicorn
 requests
 python-dotenv
-python-multipart  # <-- NEW (for photo upload)
+python-multipart
+boto3

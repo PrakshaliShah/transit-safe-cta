@@ -11,26 +11,32 @@
     <style>
         body { padding: 0; margin: 0; background-color: #0f172a; }
         .container { padding: 20px; max-width: 800px; }
-        
-        #map { 
-            height: 400px; width: 100%; border-radius: 12px; margin-bottom: 20px; 
-            border: 2px solid #334155; z-index: 1;
-        }
-
+        #map { height: 400px; width: 100%; border-radius: 12px; margin-bottom: 20px; border: 2px solid #334155; z-index: 1; }
         .status-panel { background: #1e293b; padding: 20px; border-radius: 12px; margin-top: -10px; position: relative; z-index: 2; }
         
-        /* RESTORED BUTTON STYLES */
-        .btn-danger { background-color: #ef4444; border: none; } /* Red */
-        .btn-warning { background-color: #f97316; border: none; } /* Orange */
-        .btn-medical { background-color: #3b82f6; border: none; } /* Blue */
-        .btn-alert   { background-color: #a855f7; border: none; } /* Purple */
+        /* ALERT BUTTONS */
+        .btn-danger { background-color: #ef4444; border: none; }
+        .btn-warning { background-color: #f97316; border: none; }
+        .btn-medical { background-color: #3b82f6; border: none; }
+        .btn-alert   { background-color: #a855f7; border: none; }
+        
+        /* CAMERA BUTTON STYLING */
+        .camera-label {
+            display: block; width: 100%; padding: 15px; 
+            background-color: #334155; color: white; 
+            text-align: center; border-radius: 8px; cursor: pointer;
+            margin-bottom: 20px; border: 2px dashed #94a3b8;
+            font-weight: bold;
+        }
+        .camera-label:hover { background-color: #475569; }
+        .camera-active { background-color: #22c55e !important; border-color: white; }
     </style>
 </head>
 <body>
 
     <main class="container">
         <hgroup>
-            <h1>🚆 CTA Live Reporting</h1>
+            <h1>🚆 CTA Command Center</h1>
             <p style="color:#94a3b8;">Live Tracking & Threat Response</p>
         </hgroup>
 
@@ -54,15 +60,20 @@
                 <h3 id="trainId">Scanning...</h3>
                 <small id="confBadge" style="background:#333; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem;">...</small>
             </div>
-
             <p id="distInfo" style="margin-top: 10px; color: #cbd5e1;">Waiting for GPS...</p>
-            
+            <hr>
+
+            <small style="color:#94a3b8;">EVIDENCE UPLOAD (Optional)</small>
+            <input type="file" id="evidenceCam" accept="image/*" capture="environment" style="display:none;" onchange="uploadEvidence()">
+            <label for="evidenceCam" id="camBtn" class="camera-label">📷 Snap Photo Evidence</label>
+
             <hr>
             <small style="color:#94a3b8;">SELECT INCIDENT TYPE</small>
-            
             <div class="grid" style="margin-top:10px;">
                 <button onclick="sendAlert('WEAPON')" class="btn-danger">🔫 Weapon</button>
                 <button onclick="sendAlert('FIGHT')" class="btn-warning">👊 Fight</button>
+            </div>
+            <div class="grid">
                 <button onclick="sendAlert('MEDICAL')" class="btn-medical">🚑 Medical</button>
                 <button onclick="sendAlert('HARASSMENT')" class="btn-alert">⚠️ Harassment</button>
             </div>
@@ -71,35 +82,26 @@
 
     <script>
         var map = L.map('map').setView([41.8781, -87.6298], 13);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '© OpenStreetMap, © CartoDB',
-            maxZoom: 19
-        }).addTo(map);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 19 }).addTo(map);
 
         var userMarker = null;
         var trainMarkers = [];
+        var currentRunNumber = "UNKNOWN"; // Store this for the photo upload
 
         async function startTracking() {
             const btn = document.getElementById('trackBtn');
             const route = document.getElementById('routeSelect').value;
-            
             btn.setAttribute('aria-busy', 'true');
             btn.textContent = 'Scanning...';
 
-            if (!navigator.geolocation) {
-                alert("GPS not supported");
-                return;
-            }
+            if (!navigator.geolocation) { alert("GPS not supported"); return; }
 
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
 
                 if (userMarker) map.removeLayer(userMarker);
-                userMarker = L.circleMarker([lat, lon], {
-                    color: '#3b82f6', radius: 8, fillOpacity: 1
-                }).addTo(map).bindPopup("You are here");
-
+                userMarker = L.circleMarker([lat, lon], { color: '#3b82f6', radius: 8, fillOpacity: 1 }).addTo(map).bindPopup("You are here");
                 map.setView([lat, lon], 14);
 
                 try {
@@ -109,59 +111,71 @@
                     btn.setAttribute('aria-busy', 'false');
                     btn.textContent = '📍 Refresh Map';
                     document.getElementById('resultBox').style.display = 'block';
-
                     clearMap();
 
                     if (data.found) {
                         const closest = data.closest_train;
-                        
-                        // 1. SHOW TRAIN INFO (Next Stop & Distance)
-                        document.getElementById('trainId').innerText = `✅ Run #${closest.run_number}`;
-                        document.getElementById('distInfo').innerHTML = `
-                            Next Stop: <strong>${closest.next_stop}</strong><br>
-                            Distance: ${closest.distance_meters}m
-                        `;
+                        currentRunNumber = closest.run_number; // SAVE RUN NUMBER
 
-                        // 2. SHOW CONFIDENCE
+                        document.getElementById('trainId').innerText = `✅ Run #${closest.run_number}`;
+                        document.getElementById('distInfo').innerHTML = `Next Stop: <strong>${closest.next_stop}</strong><br>Distance: ${closest.distance_meters}m`;
+
                         const badge = document.getElementById('confBadge');
                         if (data.confidence === "High") {
-                            badge.style.backgroundColor = "#22c55e"; // Green
-                            badge.innerText = "HIGH CONFIDENCE";
+                            badge.style.backgroundColor = "#22c55e"; badge.innerText = "HIGH CONFIDENCE";
                         } else {
-                            badge.style.backgroundColor = "#f59e0b"; // Orange
-                            badge.innerText = "LOW CONFIDENCE";
+                            badge.style.backgroundColor = "#f59e0b"; badge.innerText = "LOW CONFIDENCE";
                         }
 
                         data.all_trains.forEach(train => {
                             const isClosest = (train.run_number === closest.run_number);
                             const markerColor = isClosest ? '#22c55e' : '#ef4444';
                             const zIndex = isClosest ? 100 : 50;
-                            
-                            const marker = L.marker([train.lat, train.lon], {
-                                zIndexOffset: zIndex,
-                                icon: L.divIcon({
-                                    className: 'custom-icon',
-                                    html: `<div style="background-color: ${markerColor}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>`
-                                })
-                            }).addTo(map);
+                            const marker = L.marker([train.lat, train.lon], { zIndexOffset: zIndex, icon: L.divIcon({ className: 'custom-icon', html: `<div style="background-color: ${markerColor}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>` }) }).addTo(map);
                             marker.bindPopup(`<b>Run #${train.run_number}</b><br>Next: ${train.next_stop}`);
                             trainMarkers.push(marker);
                         });
-
                     } else {
                         document.getElementById('trainId').innerText = "❌ No Trains Found";
                     }
-
-                } catch (e) {
-                    alert("Error: " + e);
-                    btn.setAttribute('aria-busy', 'false');
-                }
+                } catch (e) { alert("Error: " + e); btn.setAttribute('aria-busy', 'false'); }
             });
+        }
+
+        async function uploadEvidence() {
+            const fileInput = document.getElementById('evidenceCam');
+            const file = fileInput.files[0];
+            const btn = document.getElementById('camBtn');
+
+            if (!file) return;
+
+            // Show uploading state
+            btn.innerText = "⏳ Uploading to HQ...";
+            
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("run_number", currentRunNumber);
+            formData.append("gps", "41.8, -87.6"); // Simplified for demo
+
+            try {
+                const response = await fetch('/submit-report', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                
+                if (result.status === "success") {
+                    btn.innerText = "✅ Evidence Securely Uploaded";
+                    btn.classList.add("camera-active");
+                }
+            } catch (error) {
+                alert("Upload Failed: " + error);
+                btn.innerText = "❌ Upload Failed";
+            }
         }
 
         function sendAlert(type) {
             const trainText = document.getElementById('trainId').innerText;
-            // Get text cleanly without HTML tags for the SMS
             const rawDistText = document.getElementById('distInfo').innerText.replace('\n', '. ');
             const smsBody = `EMERGENCY: ${type} reported. ${trainText}. ${rawDistText}. GPS included.`;
             window.location.href = `sms:911?body=${encodeURIComponent(smsBody)}`;
@@ -174,4 +188,3 @@
     </script>
 </body>
 </html>
-

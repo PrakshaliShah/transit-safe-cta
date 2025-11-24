@@ -9,58 +9,78 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <style>
-        /* BASE DESKTOP STYLES (Side-by-Side) */
+        /* General Layout */
         body { padding: 0; margin: 0; background-color: #0f172a; }
         .container { padding: 20px; max-width: 1200px; } 
-
+        
+        /* Side-by-Side Grid */
         .main-grid {
             display: grid;
             gap: 20px;
-            grid-template-columns: 2fr 1fr; /* Default 70/30 split */
+            grid-template-columns: 2fr 1fr; /* 70/30 split on wide screens */
         }
 
-        #map { height: 600px; width: 100%; border-radius: 12px; border: 2px solid #334155; z-index: 1; }
+        /* Map Container */
+        #map { 
+            height: 600px; width: 100%; border-radius: 12px; border: 2px solid #334155; z-index: 1;
+        }
+
+        /* Controls Panel (Right Column) */
         .controls-panel {
             display: flex;
             flex-direction: column;
             gap: 15px;
             background: #1e293b;
-            padding: 20px;
+            padding: 20px; 
             border-radius: 12px;
-            height: 600px; 
+            height: 600px; /* Match map height */
         }
         
-        /* RESTORED BUTTON STYLES */
+        /* Status Box / Result Panel */
+        .status-panel { 
+            background: #11191f; 
+            padding: 15px; 
+            border-radius: 8px; 
+            flex-grow: 1; 
+            overflow-y: auto; 
+        }
+        
+        /* ALIGNMENT FIX: Groups Run ID and Badge */
+        .status-header {
+            display: flex;
+            align-items: center; 
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+
+        /* Status Header Text */
+        #trainId {
+            margin: 0;
+            font-size: 1.2rem;
+            padding-right: 10px; 
+            white-space: nowrap; 
+        }
+        
+        /* Emergency Button Colors */
         .btn-danger { background-color: #ef4444; border: none; }
         .btn-warning { background-color: #f97316; border: none; }
         .btn-medical { background-color: #3b82f6; border: none; }
         .btn-alert   { background-color: #a855f7; border: none; }
-        
-        /* --- MOBILE OPTIMIZATION (Fixes Stacking and Map Height) --- */
-        @media (max-width: 600px) {
-            /* 1. Stack the columns */
+
+        /* Media Query for Mobile: Stack everything */
+        @media (max-width: 992px) {
             .main-grid {
-                grid-template-columns: 1fr; 
-                gap: 10px;
+                grid-template-columns: 1fr;
             }
-            
-            /* 2. Reduce Map Height (Crucial for mobile viewing) */
-            #map {
-                height: 50vh; /* Takes up half the screen vertically */
-                margin-top: 10px;
-            }
-
-            /* 3. Force Button Grid to 1-Column */
-            .grid {
-                grid-template-columns: 1fr; /* Makes Weapon/Fight stack fully */
-                gap: 8px;
-            }
-
-            /* 4. Fix Padding/Height for Controls */
             .controls-panel {
-                height: auto; /* Allow height to collapse */
-                padding: 15px;
+                height: auto;
             }
+        }
+        @media (max-width: 600px) {
+            #map { height: 50vh; margin-top: 10px;}
+            .main-grid { gap: 10px; }
+            .grid { grid-template-columns: 1fr; gap: 8px; }
+            .controls-panel { padding: 15px; }
         }
     </style>
 </head>
@@ -78,6 +98,8 @@
         </div>
 
         <div class="main-grid">
+            
+            <div id="map"></div>
             
             <div class="controls-panel">
                 
@@ -100,7 +122,7 @@
                 <div id="resultBox" class="status-panel" style="display:block;">
                     
                     <div class="status-header">
-                        <h3 id="trainId">System Ready.</h3>
+                        <h3 id="trainId" style="margin: 0;">System Ready.</h3>
                         <small id="confBadge" style="background:#333; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem;">OFFLINE</small>
                     </div>
 
@@ -126,15 +148,13 @@
                 </div>
 
             </div>
-
-            <div id="map"></div>
         </div>
         </main>
 
     <script>
-        // --- JAVASCRIPT FUNCTIONS (UNCHANGED) ---
+        // --- JAVASCRIPT FUNCTIONS ---
         var map = L.map('map').setView([41.8781, -87.6298], 13);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 19 }).addTo(map);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap, © OpenStreetMap, © CartoDB', maxZoom: 19 }).addTo(map);
 
         var userMarker = null;
         var trainMarkers = [];
@@ -174,4 +194,15 @@
                         currentRunNumber = closest.run_number; 
 
                         document.getElementById('trainId').innerText = `✅ Run #${closest.run_number}`;
-                        document.getElementById('distInfo').innerHTML = `Next Stop: <strong>${closest.next_
+                        document.getElementById('distInfo').innerHTML = `Next Stop: <strong>${closest.next_stop}</strong><br>Distance: ${closest.distance_meters}m`;
+
+                        const badge = document.getElementById('confBadge');
+                        if (data.confidence === "High") {
+                            badge.style.backgroundColor = "#22c55e"; badge.innerText = "HIGH CONFIDENCE";
+                        } else {
+                            badge.style.backgroundColor = "#f59e0b"; badge.innerText = "LOW CONFIDENCE";
+                        }
+
+                        data.all_trains.forEach(train => {
+                            const isClosest = (train.run_number === closest.run_number);
+                            const markerColor = isClosest ? '#22c55e' : '#ef4444

@@ -2,7 +2,7 @@
 # https://hub.docker.com/_/python
 FROM python:3.10-slim
 
-# Allow statements and log messages to immediately appear in the Knative logs
+# Allow statements and log messages to immediately appear in the logs
 ENV PYTHONUNBUFFERED True
 
 # Copy local code to the container image.
@@ -14,6 +14,4 @@ COPY . ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Run the web service on container startup.
-# Cloud Run expects the app to listen on the port defined by the PORT environment variable.
 CMD exec uvicorn main:app --host 0.0.0.0 --port $PORT
-Added Dockerfile

@@ -16,3 +16,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Run the web service on container startup.
 # Cloud Run expects the app to listen on the port defined by the PORT environment variable.
 CMD exec uvicorn main:app --host 0.0.0.0 --port $PORT
+Added Dockerfile

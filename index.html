@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -5,27 +6,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
     <title>Transit Safe: CTA</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Reliable Leaflet CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
     
     <style>
+        /* General Layout */
         body { padding: 0; margin: 0; background-color: #0f172a; }
         .container { padding: 20px; max-width: 1200px; } 
 
+        /* Side-by-Side Grid */
         .main-grid {
             display: grid;
             gap: 20px;
             grid-template-columns: 2fr 1fr;
         }
 
+        /* Map Container */
         #map { 
             height: 600px; 
             width: 100%; 
             border-radius: 12px; 
             border: 2px solid #334155;
             z-index: 1;
+            background-color: #1e293b;
         }
 
+        /* Controls Panel (Right Column) */
         .controls-panel {
             display: flex;
             flex-direction: column;
@@ -36,6 +44,7 @@
             height: 600px;
         }
         
+        /* Status Box / Result Panel */
         .status-panel { 
             background: #11191f; 
             padding: 15px; 
@@ -44,6 +53,7 @@
             overflow-y: auto; 
         }
         
+        /* Header Styling */
         .app-header {
             display: flex;
             align-items: center;
@@ -188,39 +198,44 @@
         var currentLat = "0.0";
         var currentLon = "0.0";
 
-        document.addEventListener("DOMContentLoaded", function() {
-            map = L.map('map').setView([41.8781, -87.6298], 13);
+        function initMap() {
+            if (map) return;
             
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
-                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', 
-                maxZoom: 19,
-                className: 'map-tiles'
-            }).addTo(map);
+            map = L.map('map', {
+                center: [41.8781, -87.6298],
+                zoom: 13,
+                zoomControl: true
+            });
 
-            const style = document.createElement('style');
-            style.innerHTML = `
-                .map-tiles {
-                    filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
-                }
-            `;
-            document.head.appendChild(style);
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
 
             setTimeout(function() { 
                 map.invalidateSize(); 
-            }, 500);
-        });
+            }, 300);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initMap);
+        } else {
+            initMap();
+        }
 
         async function startTracking() {
             const btn = document.getElementById('trackBtn');
             const route = document.getElementById('routeSelect').value;
             
-            if (!map) { alert("Map initializing..."); return; }
+            if (!map) {
+                initMap();
+            }
 
             btn.setAttribute('aria-busy', 'true');
             btn.textContent = 'Scanning...';
 
             if (!navigator.geolocation) { 
-                alert("GPS not supported"); 
+                alert("GPS not supported on this browser."); 
                 btn.setAttribute('aria-busy', 'false');
                 btn.textContent = '📍 Start Live Tracking';
                 return; 
@@ -239,14 +254,28 @@
                 map.invalidateSize();
 
                 try {
-                    const response = await fetch(`/find-train/${route}?lat=${lat}&lon=${lon}`); const data = await response.json();  btn.setAttribute('aria-busy', 'false'); btn.textContent = '📍 Refresh Map'; document.getElementById('resultBox').style.display = 'block'; clearMap();  if (data.found) { const closest = data.closest_train; currentRunNumber = closest.run_number;  document.getElementById('trainId').innerText = `✅ Run #${closest.run_number}`;
-                        document.getElementById('distInfo').innerHTML = `Next Stop: <strong>${closest.next_stop}</strong><br>Distance:${closest.distance_meters}m`;
+                    const response = await fetch(`/find-train/${route}?lat=${lat}&lon=${lon}`);
+                    const data = await response.json();
+
+                    btn.setAttribute('aria-busy', 'false');
+                    btn.textContent = '📍 Refresh Map';
+                    document.getElementById('resultBox').style.display = 'block';
+                    clearMap();
+
+                    if (data.found) {
+                        const closest = data.closest_train;
+                        currentRunNumber = closest.run_number; 
+
+                        document.getElementById('trainId').innerText = `✅ Run #${closest.run_number}`;
+                        document.getElementById('distInfo').innerHTML = `Next Stop: <strong>${closest.next_stop}</strong><br>Distance: ${closest.distance_meters}m`;
 
                         const badge = document.getElementById('confBadge');
                         if (data.confidence === "High") {
-                            badge.style.backgroundColor = "#22c55e"; badge.innerText = "HIGH CONFIDENCE";
+                            badge.style.backgroundColor = "#22c55e"; 
+                            badge.innerText = "HIGH CONFIDENCE";
                         } else {
-                            badge.style.backgroundColor = "#f59e0b"; badge.innerText = "LOW CONFIDENCE";
+                            badge.style.backgroundColor = "#f59e0b"; 
+                            badge.innerText = "LOW CONFIDENCE";
                         }
 
                         data.all_trains.forEach(train => {
@@ -265,4 +294,88 @@
                                 zIndexOffset: zIndex, 
                                 icon: L.divIcon({ 
                                     className: 'custom-icon', 
-                                    html: `<div style="background-color: ${markerColor}; width: 12px; height: 12px; border-radius: 50\%; opacity:${opacity}; border: ${border};"></div>` }) }).addTo(map);  let statusText = train.is_ghost ? "👻 GHOST" : "📡 LIVE"; marker.bindPopup(`<b>${statusText}</b><br>Run #${train.run_number}<br>Next:${train.
+                                    html: `<div style="background-color: ${markerColor}; width: 12px; height: 12px; border-radius: 50%; opacity: ${opacity}; border: ${border};"></div>` 
+                                }) 
+                            }).addTo(map);
+                            
+                            let statusText = train.is_ghost ? "👻 GHOST" : "📡 LIVE";
+                            marker.bindPopup(`<b>${statusText}</b><br>Run #${train.run_number}<br>Next: ${train.next_stop}`);
+                            trainMarkers.push(marker);
+                        });
+                    } else {
+                        document.getElementById('trainId').innerText = "❌ No Trains Found";
+                        document.getElementById('distInfo').innerHTML = "No active trains detected on this line right now.";
+                        currentRunNumber = "UNKNOWN";
+                    }
+                } catch (e) { 
+                    alert("Error: " + e); 
+                    btn.setAttribute('aria-busy', 'false'); 
+                    btn.textContent = '📍 Start Live Tracking';
+                }
+            }, (err) => {
+                alert("GPS Permission Denied or Timeout: " + err.message);
+                btn.setAttribute('aria-busy', 'false');
+                btn.textContent = '📍 Start Live Tracking';
+            }, {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            });
+        }
+
+        async function uploadEvidence() {
+            const fileInput = document.getElementById('evidenceCam');
+            const file = fileInput.files[0];
+            const camBtn = document.getElementById('camBtn');
+
+            if (!file) return;
+
+            camBtn.innerText = "⏳ Uploading to HQ...";
+            camBtn.classList.remove("camera-active");
+
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("run_number", currentRunNumber);
+            formData.append("gps", `${currentLat}, ${currentLon}`);
+
+            try {
+                const response = await fetch('/submit-report', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                
+                if (result.status === "success") {
+                    camBtn.innerText = "✅ Evidence Securely Uploaded";
+                    camBtn.classList.add("camera-active");
+                } else {
+                    alert("Upload Failed: " + result.message);
+                    camBtn.innerText = "❌ Upload Failed";
+                }
+            } catch (error) {
+                alert("Connection Error: " + error);
+                camBtn.innerText = "❌ Upload Failed";
+            }
+        }
+
+        function sendAlert(type) {
+            const trainText = document.getElementById('trainId').innerText;
+            const rawDistText = document.getElementById('distInfo').innerText.replace('\n', '. ');
+            const gpsCoordinates = `${currentLat}, ${currentLon}`;
+            
+            const smsBody = `EMERGENCY: ${type} reported. ${trainText}. ${rawDistText}. GPS: ${gpsCoordinates}`;
+            
+            window.location.href = `sms:911?body=${encodeURIComponent(smsBody)}`;
+        }
+        
+        function clearMap() {
+            if (trainMarkers) {
+                trainMarkers.forEach(m => map.removeLayer(m));
+            }
+            trainMarkers = [];
+        }
+    </script>
+</body>
+</html>
+
+```
